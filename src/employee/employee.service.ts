@@ -1,6 +1,5 @@
 import {
-  HttpException,
-  HttpStatus,
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -42,7 +41,12 @@ export class EmployeeService {
 
   async assignManager(assignManagerDto: AssignManagerDto): Promise<Employee> {
     const { employeeId, managerId } = assignManagerDto;
-    console.log(assignManagerDto);
+
+    if (employeeId === managerId) {
+      throw new BadRequestException(
+        'Сотрудник не может быть рукводителем сам у себя',
+      );
+    }
 
     const employee = await this.employeeRepository.findOneBy({
       id: employeeId,
