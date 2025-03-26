@@ -21,22 +21,10 @@ export class EmployeeService {
   async createEmployee(
     createEmployeeDto: CreateEmployeeDto,
   ): Promise<Employee> {
-    const { managerId } = createEmployeeDto;
-
-    const employee = this.employeeRepository.create(createEmployeeDto);
-
-    let manager: Employee;
-
-    if (managerId) {
-      manager = await this.employeeRepository.findOneBy({ id: managerId });
-      if (!manager) {
-        throw new NotFoundException('Руководитель не найден');
-      }
-
-      employee.managerId = manager.id;
-    }
-
-    return this.employeeRepository.save(employee);
+    return this.employeeRepository.manager.transaction(async (transactionalEntityManager) => {
+      const employee = transactionalEntityManager.create(Employee, createEmployeeDto);
+      return transactionalEntityManager.save(employee);
+    });
   }
 
   async assignManager(assignManagerDto: AssignManagerDto): Promise<Employee> {
@@ -69,24 +57,22 @@ export class EmployeeService {
   }
 
   async deleteEmployee(id: number): Promise<void> {
-    const employee = await this.employeeRepository.findOne({
-      where: { id },
+
+    await this.employeeRepository.manager.transaction(async (transactionalEntityManager) => {
+      const employeesWithThisManager = await transactionalEntityManager.find(Employee, {
+        where: { managerId: id },
+      });
+
+      for (const emp of employeesWithThisManager) {
+        emp.managerId = null;
+      }
+
+      if (employeesWithThisManager.length > 0) {
+        await transactionalEntityManager.save(employeesWithThisManager);
+      }
+
+      await transactionalEntityManager.delete(Employee, id);
     });
-
-    if (!employee) {
-      throw new NotFoundException('Сотрудник не найден');
-    }
-
-    const employeesWithThisManager = await this.employeeRepository.find({
-      where: { managerId: id },
-    });
-
-    for (const emp of employeesWithThisManager) {
-      emp.managerId = null;
-      await this.employeeRepository.save(emp);
-    }
-
-    await this.employeeRepository.delete(id);
   }
 
   async getAllEmployees(): Promise<Employee[]> {
